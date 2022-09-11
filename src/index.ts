@@ -12,8 +12,7 @@ import {
     warpPoints,
 } from "@thi.ng/geom";
 import { draw } from "@thi.ng/hiccup-canvas";
-import type { State } from "./api";
-import { resolveState } from "./state";
+import { pickRandom } from "@thi.ng/random";
 
 // these declarations ensure TypeScript is aware of these
 // externally defined vars/functions
@@ -25,26 +24,21 @@ declare function fxpreview(): void;
 // any `if (DEBUG) { ... }` code blocks will be removed in production builds
 const DEBUG = process.env.NODE_ENV !== "production";
 
-let STATE: State;
 let timer: number;
-let doUpdate = true;
+let doUpdate = false;
+
+const ATTRIBUTES: String[] = ["sustainable","the new black", "dead","overrated","acceptable","fulfilling","worth it","adaptable","a curse or a blessing","adventurous","ambitious","attractive","courageous","sincere","caring","charming","civilised","cooperative","compassionate","competitive","confident","considerate","steady","serene","courageous","courteous","creative","credible","cultured","daring","decent","profound","attentive to detail","determined","sacrificial","diligent","disciplined","elegant","sensitive","ethical","fashionable","fearless","free","funny","gracious","tenacious","grounded","practical","helpful","honest","modest","independent","inspiring","intelligent","interesting","likeable","loyal","mature","merciful","open-minded","optimistic","original","passionate","patient","pleasant","cultivated","popular","pragmatic","realistic","refined","relaxed","reliable","indestructible","resolute","respectful","considerate","reserved","secure","self-determined","selfless","sincere","competent","diligent","sensitive","tactful","talented","trustworthy","unaffected","unafraid","understanding","upright","virtuous","warm-hearted","well-known","well respected","well-mannered","witty"];
+const NOUNS: String[] = ["Is labour","Is justice","Is god","Is gold","Is sleep","Is hair","Is Portugal","Is Australia","Is honey","Are potatoes","Is the Queen","Are bananas","Is rain","Is a rainbow","Is a beard","Is a refrigerator","Is Belgium","Are boys","Is breakfast","Is jewellery","Is Russia","Are candles","Are Sandwiches","Is a Car","Is school","Is education","Are Kangaroos","Is shampoo","Is China","Is the church","Are lawyers","Is sugar","Is leather","Is death","Is liberalism","Are teachers","Are smartphones","Are diamonds","Is television","Is London","Is art","Are Toothbrushs","Are Dreams","Is traffic","Is christmas","Is easter","Are Eggs","Is Manchester","Is Uganda","Is energy","Are monkeys","Is family","Is money","Is wealth","Is football","Is oil"];
+
+let questionHolder: Element | null = null;
 
 // main initialization function (called from further below)
 const init = () => {
     // cancel any queued updates
     cancelAnimationFrame(timer);
 
-    // update/re-compute state/config (only those parts which are transitively
-    // dependent on window size (and/or other dynamically changing factors)
-    // the rest of the app state will already be ready/valid at this point...
-    // see src/state.ts for further details...
-    STATE = resolveState({
-        width: window.innerWidth,
-        height: window.innerHeight,
-    });
+    questionHolder = document.getElementsByClassName("question")[0];
 
-    // insert any other (re)initialization tasks here
-    // ...
 
     // trigger update with new settings
     update();
@@ -61,93 +55,16 @@ const init = () => {
  * (if not, expect an invoice :)
  */
 const update = () => {
-    // destructure state var to pull out the bits we're interested in here...
-    const { canvas, particles } = STATE;
-
-    // update all particles
-    particles.forEach((p) => p.update());
-
-    // draw everything (using thi.ng/geom & thi.ng/hiccup-canvas)
-    // see package docs & readmes for further details...
-    draw(canvas.ctx, getScene(STATE));
+    let tmpNoun = pickRandom(NOUNS);
+    let tmpAttribute = pickRandom(ATTRIBUTES);
+    if(questionHolder) questionHolder.innerHTML = `<h1>${tmpNoun} ${tmpAttribute} ?</h1>`;
 
     // loop unless user requested pause
     // (see keydown handler)
     doUpdate && (timer = requestAnimationFrame(update));
 };
 
-/**
- * Constructs a small hierarchy of shapes used to visualize the particle system,
- * both for drawing in the canvas (via {@link update}) and to export the scene
- * as SVG (see key event handler further below)...
- *
- * @param state
- */
-const getScene = ({
-    particles,
-    scaledSize,
-    theme,
-    cells,
-    clusterScale,
-}: State) =>
-    group({ lineCap: "round" }, [
-        // filled rect (aka background)
-        rect(scaledSize, { fill: theme.bg }),
-        <Group>(
-            scale(group({ stroke: "#fff", fill: "none" }, cells), scaledSize)
-        ),
 
-        // now transform all particles and warp groups N particles to the space
-        // defined by the different grid cells
-        // remember: both grid cells and particle positions are originally
-        // defined as normalized coordinates. by scaling the grid cell to the
-        // canvas size and then warping particles into these scaled boxes we
-        // automatically scale the particle positions too...
-        ...particles.map((p, i) =>
-            polyline(
-                warpPoints(
-                    p.tail,
-                    // target rect/space
-                    // the bitshift by clusterScale is equivalent to an integer division
-                    // e.g. 23 >> 4 = 23 / 16 = 1
-                    scale(cells[i >> clusterScale], scaledSize),
-                    // source rect/space
-                    rect(1)
-                ),
-                // attributes for each individual polyline
-                {
-                    stroke: p.color,
-                    weight: p.thick,
-                }
-            )
-        ),
-    ]);
-
-// global key handler
-window.onkeydown = (e) => {
-    switch (e.key) {
-        case " ":
-            doUpdate = !doUpdate;
-            doUpdate && update();
-            break;
-        case "x":
-            // trigger download of canvas w/ timestamped base filename
-            // (uses PNG by default, configurable)
-            downloadCanvas(
-                STATE!.canvas.canvas,
-                `fxhash-${FMT_yyyyMMdd_HHmmss()}`
-            );
-            break;
-        case "s":
-            // convert scene to SVG & trigger download w/ timestamped filename
-            downloadWithMime(
-                `fxhash-${FMT_yyyyMMdd_HHmmss()}.svg`,
-                asSvg(svgDoc({}, getScene(STATE))),
-                { mime: "image/svg+xml" }
-            );
-            break;
-    }
-};
 
 // re-initialize dynamic state when window is resized
 window.onresize = init;
@@ -155,16 +72,7 @@ window.onresize = init;
 // kick off...
 init();
 
-// expose selected features/traits/params for FXhash platform
-const features = ((<any>window).$fxhashFeatures = {
-    theme: STATE!.themeId,
-    depth: STATE!.maxDepth,
-    particles: STATE!.particles.length,
-});
+
 
 // print out to console (will be removed for production build)
-DEBUG && console.log(fxhash, features);
-
-// expose state as global variable (during development only, for debug purposes
-// in browser console...)
-exposeGlobal("state", STATE!);
+DEBUG && console.log(fxhash);
